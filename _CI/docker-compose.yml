@@ -1,0 +1,35 @@
+version: '3.3'
+
+services:
+  db:
+    restart: always
+    container_name: postgres
+    image: postgres
+    environment:
+      - POSTGRES_DB=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    ports:
+      - ${DB_PORT}:5432
+    volumes:
+      - ./postgres/backup:/backup
+      - ./postgres/pg_data:/var/lib/postgresql/data/
+
+  web:
+    restart: always
+    image: reader
+    container_name: reader
+    environment:
+      - DB_HOST=db
+      - DB_NAME=postgres
+      - DB_USER=postgres
+      - DB_PASS=postgres
+    ports:
+      - ${PORT_WEB}:8000
+      - ${PORT_WEBSOCKET}:9000
+    build:
+      context: ../
+      dockerfile: _CI/Dockerfile
+    command: ./docker-entrypoint.sh
+    depends_on:
+      - db

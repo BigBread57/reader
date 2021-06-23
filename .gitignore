@@ -1,0 +1,19 @@
+__pycache__
+
+media/
+
+# pycharm
+.idea/
+*.pyc
+.DS_Store
+.di
+
+# environment
+venv/
+*.env
+
+reader/reader/settings/local.py
+pg_data/
+
+local.py
+

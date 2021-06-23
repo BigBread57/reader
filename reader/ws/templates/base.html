@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>WS</title>
+    <script>
+        let ws_path = 'ws://' + window.location.hostname + ':9000/';
+
+        function ws_connect() {
+            console.log('Try to connect to WS', ws_path);
+            let sock = new WebSocket(ws_path);
+
+            let pingTimer = setInterval(function(){
+                sock.send('');
+                console.log('ping');
+            }, 60000);
+
+            sock.onopen = function() {
+                console.log('WS connection open');
+            };
+
+            sock.onmessage = function(event) {
+                let message = '';
+                try {
+                    let data = JSON.parse(event.data);
+                    message = data.message
+                } catch (e) {
+                    message = ''
+                }
+
+                switch (message) {
+                    case 'update':
+                        location.reload();
+                        break;
+                    default:
+                        break;
+                }
+            };
+
+            sock.onclose = function(event) {
+                if (event.wasClean) {
+                    console.log('WS clean connection end');
+                } else {
+                    console.log('WS connection broken');
+                }
+
+                if (pingTimer) {
+                    clearInterval(pingTimer);
+                }
+
+                // Try to reconnect in 2 seconds
+                setTimeout(function() {ws_connect();}, 5000);
+            };
+
+            sock.onerror = function(error) {
+                console.log('WS connection error !!!', error);
+
+                if (pingTimer) {
+                    clearInterval(pingTimer);
+                }
+
+            };
+        }
+
+        ws_connect();
+    </script>
+</head>
+<body>
+
+</body>
+</html>
