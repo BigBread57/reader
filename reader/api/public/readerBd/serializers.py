@@ -111,7 +111,7 @@ class CreateUpdateDaySerializer(serializers.ModelSerializer):
         fields = (
             'id', 'user', 'project', 'date', 'type_of_day',
             'event', 'plan_working_hours')
-        read_only_fields = ('id', )
+        read_only_fields = ('id',)
 
 
 class DayStatisticSerializer(serializers.ModelSerializer):
@@ -120,17 +120,18 @@ class DayStatisticSerializer(serializers.ModelSerializer):
     UserStatisticDetailSerializer и ProjectsStatisticDetailSerializer
     """
 
-    control_events = ControlTimeSerializer(many=True)
+    control_time = ControlTimeSerializer(many=True)
     type_of_day = ChoiceField(choices=TypeOfDay.STATUS_CHOICES)
-    event = EventSerializer()
+    event = EventSerializer(many=True)
     project = serializers.SerializerMethodField()
 
     class Meta:
         model = Day
         fields = (
             'id', 'user', 'date', 'project', 'type_of_day',
-            'control_events', 'event', 'plan_working_hours', 'real_working_hours',
+            'control_time', 'event', 'plan_working_hours', 'real_working_hours',
             'time_of_respectful_absence_fact', 'time_of_not_respectful_absence_fact', 'real_overtime')
+        read_only_fields = fields
 
     def get_project(self, obj):
         return f'{obj.project}'.strip()

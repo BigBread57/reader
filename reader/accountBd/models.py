@@ -2,7 +2,7 @@ from django.contrib.auth.models import User, AbstractUser
 from django.db import models
 from django.conf import settings
 
-from accountBd.collections import UserRank, UserPosition, NumberAppeal
+from accountBd.collections import UserRank, UserPosition, NumberAppeal, UserStatus
 
 
 class User(AbstractUser):
@@ -57,6 +57,8 @@ class Profile(models.Model):
     position = models.CharField('Должность', max_length=20, choices=UserPosition.STATUS_CHOICES,
                                 default=UserPosition.OPERATOR)
     count_duty = models.IntegerField('Количество нарядов', default=0)
+    status = models.CharField('Статус пользователя', max_length=20, choices=UserStatus.STATUS_CHOICES,
+                              default=UserStatus.ARMY_SERVICE)
     photo = models.ImageField('Фотография', upload_to='users', blank=True)
 
     class Meta:

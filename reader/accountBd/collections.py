@@ -68,3 +68,19 @@ class NumberAppeal:
         (ONE, '1'),
         (TWO, '2'),
     ]
+
+
+class UserStatus:
+    """
+    Статус оператора
+    """
+
+    ARMY_SERVICE = 'army_service'
+    CIVIL_SERVICE = 'civil_service'
+    DEMOB = 'demob'
+
+    STATUS_CHOICES = [
+        (ARMY_SERVICE, 'Военная служба'),
+        (CIVIL_SERVICE, 'Гражданская служба'),
+        (DEMOB, 'Демобилизация'),
+    ]

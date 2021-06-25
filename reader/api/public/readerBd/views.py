@@ -9,7 +9,7 @@ from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from accountBd.collections import UserPosition
+from accountBd.collections import UserPosition, UserStatus
 from accountBd.models import User, Profile, FileRepository
 from docs.statistic_docx import event_statistic, journal
 from readerBd.collections import Times, TypeOfDay
@@ -17,7 +17,7 @@ from readerBd.models import ControlTime, Day, ScheduleDuty, OrderOfDuty, ListEve
 from .filters import ControlTimeFilter
 from .serializers import ControlTimeReaderSerializer, DaySerializer, ControlTimeSerializer, EventSerializer, \
     ControlTimeScheduleDutySerializer, ListEventsSerializer, UpdateControlTimeSerializer, CreateUpdateDaySerializer
-from .utils import overtime_calculation, change_appeal, calculation_absence
+from .utils import overtime_calculation, change_appeal, calculation_time_variable
 
 logging.basicConfig(level='INFO')
 
@@ -43,7 +43,7 @@ class ControlTimeViewSet(viewsets.ModelViewSet):
         # то ищем пользователя которому принадлежит код, иначе возвращаем предупреждение, что код не найден и код 200
         # чтобы программа по принятию RFID-меток не выдавала ошибку и не останавливала работу считывателя
         control_time = ControlTime.objects.order_by('-time_entry').filter(code=serializer.validated_data.get('code'),
-                                                                          time_exit=None).last()
+                                                                          time_exit__isnull=True).last()
         try:
             user = User.objects.get(code=serializer.validated_data.get('code'))
         except User.DoesNotExist:
@@ -59,25 +59,20 @@ class ControlTimeViewSet(viewsets.ModelViewSet):
             control_time.time_difference = control_time.time_exit - control_time.time_entry
             day = Day.objects.get(id=control_time.day.id)
 
-            # Проверяем тип дня. Если рабочий, то в рабочее время записываем (time_difference - overtime),
-            # а переработку (overtime) считаем в функции
+            # Проверяем тип дня и высчитваем время переработки
             if day.type_of_day == TypeOfDay.WORK:
                 control_time.overtime = overtime_calculation(control_time.time_entry,
                                                              control_time.time_exit, user, day)
-                day.real_overtime += control_time.overtime
-                day.real_working_hours += control_time.time_difference - control_time.overtime
-
-            # Если день не рабочий, например наряд или госпиталь или отпуск, то мы в рабочее время заносим 0,
-            # а в переработку time_difference, потому что пользователь не должен быть на рабочем месте
             else:
-                day.real_working_hours = datetime.timedelta(0)
                 control_time.overtime = control_time.time_difference
-                day.real_overtime += control_time.overtime
 
             control_time.save()
-            day = calculation_absence(day)
+            # Пересчитываем показатели дня, к которому относится control_time
+            day = calculation_time_variable(day)
             day.save()
 
+        # Если объект создается в первый раз, то ищется день, к которому относится control_time и сохраняется в БД
+        # время входа, и приввязывается день к control_time
         else:
             try:
                 day = Day.objects.get(user=user, date=timezone.now().date())
@@ -88,46 +83,32 @@ class ControlTimeViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         # Перед изменением объекта control_time мы изменяем данные об этом control_time в объекте Day
-
         control_time = self.get_object()
         new_time_difference = serializer.validated_data.get('time_exit') - serializer.validated_data.get('time_entry')
-        day = get_object_or_404(Day, date=serializer.validated_data.get('time_entry').date())
+
+        day = control_time.day
         user = get_object_or_404(User, id=day.user.id)
 
+        # Пересчитываем время переработки с учетом новых показателей
         if day.type_of_day == TypeOfDay.WORK:
-
             new_overtime = overtime_calculation(serializer.validated_data.get('time_entry'),
                                                 serializer.validated_data.get('time_exit'), user, day)
-            day.real_overtime += new_overtime - control_time.overtime
-            day.real_working_hours += new_time_difference - new_overtime - \
-                                      control_time.time_difference - control_time.overtime
-
         else:
             new_overtime = new_time_difference
-            day.real_overtime += new_overtime - control_time.overtime
 
-        day = calculation_absence(day)
-        day.save()
         serializer.save(time_difference=new_time_difference, overtime=new_overtime)
+
+        # Пересчитываем показатели дня, к которому относится control_time
+        day = calculation_time_variable(day)
+        day.save()
 
     def perform_destroy(self, instance):
         # Перед удалением объекта control_time мы удаляем данные об этом control_time из объекта Day
-
         control_time = self.get_object()
-        day = get_object_or_404(Day, id=control_time.day.id)
-
-        if control_time.overtime > datetime.timedelta(0) and control_time.time_difference == datetime.timedelta(0):
-            day.real_overtime -= control_time.overtime
-
-        if control_time.overtime > datetime.timedelta(0) and control_time.time_difference > datetime.timedelta(0):
-            day.real_working_hours -= control_time.time_difference - control_time.overtime
-            day.real_overtime -= control_time.overtime
-
-        if control_time.overtime == datetime.timedelta(0) and control_time.time_difference > datetime.timedelta(0):
-            day.real_working_hours -= control_time.time_difference
-
         control_time.delete()
-        day = calculation_absence(day)
+
+        # Пересчитываем показатели дня, к которому относится control_time
+        day = calculation_time_variable(control_time.day)
         day.save()
 
     def get_serializer_class(self):
@@ -147,7 +128,10 @@ class ControlTimeTodayList(generics.ListAPIView):
     serializer_class = ControlTimeSerializer
 
     def get_queryset(self):
+        # Получаем все метки с текущей датой
         qs = super().get_queryset().filter(time_entry__date=timezone.now().date())
+        # Берем пользователей, к которым относятся control_time, получаем максимальное время входа данных пользователей,
+        # то есть самые последнии метки.
         return qs.filter(
             time_entry__in=qs.values('day__user').annotate(time_entry=Max('time_entry')).values('time_entry')).order_by(
             'time_exit')
@@ -195,9 +179,7 @@ class DayViewSet(viewsets.ModelViewSet):
         else:
             user_project = Profile.objects.get(user_id=serializer.validated_data.get('user')).project
 
-        # Автоматически устанавливаем поля plan_working_hours и time_of_respectful_absence_plan в зависимости
-        # от типа дня и пользователя
-
+        # Автоматически устанавливаем поля plan_working_hours в зависимости от типа дня и пользователя
         if serializer.validated_data.get('user').profile.position in (UserPosition.OPERATOR,
                                                                       UserPosition.SENIOR_OPERATOR):
             plan_working_hours = Times.TIME_WORK_OPERATOR
@@ -230,31 +212,19 @@ class DayViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         day = self.get_object()
         profile_user = get_object_or_404(Profile, user=day.user.id)
-        # Переменные чтобы запомнить значения
+        # Переменная чтобы запомнить текущее значение реального рабочего времени
         real_working_hours_save = day.real_working_hours
 
+        # Ниже просто проверяется изменен ли тип дня, и проводится перерасчет показателей
         if day.type_of_day == TypeOfDay.WORK:
             if serializer.validated_data.get('type_of_day') != TypeOfDay.WORK:
                 day.real_working_hours = datetime.timedelta(0)
                 day.real_overtime += real_working_hours_save
-        elif day.type_of_day != TypeOfDay.WORK:
+        else:
             if serializer.validated_data.get('type_of_day') == TypeOfDay.WORK:
+                day.type_of_day = TypeOfDay.WORK
+                day = calculation_time_variable(day)
 
-                if profile_user.position in (UserPosition.OPERATOR, UserPosition.SENIOR_OPERATOR):
-                    # Проверяем количество часов, которые оператор отработал.
-                    if day.real_overtime > Times.TIME_WORK_OPERATOR:
-                        day.real_working_hours = Times.TIME_WORK_OPERATOR
-                        day.real_overtime -= day.real_working_hours
-                    else:
-                        day.real_working_hours = day.real_overtime
-                        day.real_overtime = datetime.timedelta(0)
-                else:
-                    if day.real_overtime > Times.TIME_WORK_PERSONAL:
-                        day.real_working_hours = Times.TIME_WORK_PERSONAL
-                        day.real_overtime -= day.real_working_hours
-                    else:
-                        day.real_working_hours = day.real_overtime
-                        day.real_overtime = datetime.timedelta(0)
         day.save()
         serializer.save()
 
@@ -266,7 +236,15 @@ class DayViewSet(viewsets.ModelViewSet):
 
     @action(detail=False)
     def journal(self, request, *args, **kwargs):
+        """
+        Функия необходима для формирования журнала дежурств, тот который ТБ в лаборатории
+
+        :return: Файл для скачивания журнала дежурств
+        """
+
+        # Список для всех пользователй, которые пришли в лабораторию
         list_user = []
+        # ПОлучам дни рабочих дней оператора на текущую дату
         days = Day.objects.filter(user__profile__position__in=(UserPosition.OPERATOR, UserPosition.SENIOR_OPERATOR),
                                   date=timezone.now().date(),
                                   type_of_day=TypeOfDay.WORK)
@@ -274,8 +252,9 @@ class DayViewSet(viewsets.ModelViewSet):
         document_name = f'visit_log-{timezone.now().strftime("%Y-%m-%d")}.docx'
         journal(document_name)
 
-        for day in range(0, len(days)):
-            user = days[day].user
+        # Формируем список операторов, которые пришли в лабораторию
+        for day in days:
+            user = day.user
             # Функция для добавления в ранее созданный документ инфомрации о пользователях
             list_user.append([timezone.now().date().strftime("%Y-%m-%d"),
                               user.profile.get_rank_display(),
@@ -283,6 +262,7 @@ class DayViewSet(viewsets.ModelViewSet):
                               user.get_full_name()])
         event_statistic(list_user, document_name)
 
+        # Добавляет в бд инфомрацию о сформированном файле
         file_repository, _ = FileRepository.objects.get_or_create(
             name=document_name,
             defaults={'file': f'docs/{document_name}'})
@@ -292,7 +272,7 @@ class DayViewSet(viewsets.ModelViewSet):
 
 class ScheduleDutyViewSet(viewsets.ModelViewSet):
     """
-    Класс позволяет работать с информацией о расписании дежурств по лаборатории
+    Класс позволяет работать с информацией о расписании дежурств по лаборатории и автоматически формировать его
     """
 
     permission_classes = (AllowAny,)
@@ -305,6 +285,12 @@ class ScheduleDutyViewSet(viewsets.ModelViewSet):
 
     @action(detail=False)
     def auto(self, request, *args, **kwargs):
+        """
+        Функция автоматически формирует спсиок дежурных по лаборатории
+
+        :return: Автоматически сформированный список дежурств по лаборатории
+        """
+
         # Переменная для запоминания id тех, кто уже подежурил.
         remember_count_duty = []
         # Переменная для создания конечного графика.
@@ -312,75 +298,76 @@ class ScheduleDutyViewSet(viewsets.ModelViewSet):
         # Получаем очередь дежурства.
         priority_duty = OrderOfDuty.load()
         number_appeal = priority_duty.number_appeal
+
         # Создаем график на количество пользователей.
         for days_week in range(0, len(User.objects.all())):
+
             # Получаем дату, с учетом итерации цикла.
             date_days_week = timezone.now().date() + datetime.timedelta(days=days_week)
-            # Если дня нет, заканчиваем цикл
-            if Day.objects.filter(date=date_days_week).first() is None:
-                break
+
             # Если в графике уже есть запись на дату, которая попала в цикл, то пропускаем данную дату
-            elif ScheduleDuty.objects.filter(date=date_days_week).first():
+            if ScheduleDuty.objects.filter(date=date_days_week).first():
                 continue
+
             # Если выходной день пропускаем
-            elif Day.objects.filter(date=date_days_week).first().type_of_day == TypeOfDay.OUTPUT:
+            elif date_days_week.weekday() in (5, 6):
                 continue
+
             else:
+                qs_profile = Profile.objects.filter(number_appeal=number_appeal).exclude(
+                    status=UserStatus.DEMOB).order_by('user__last_name')
                 # Узнаем максимальное и минимальное количество нарядов у операторов дежурного призыва.
-                max_count_duty = Profile.objects.filter(
-                    number_appeal=number_appeal).aggregate(max=Max('count_duty'))['max']
-                min_count_duty = Profile.objects.filter(
-                    number_appeal=number_appeal).aggregate(min=Min('count_duty'))['min']
+                max_count_duty = qs_profile.aggregate(max=Max('count_duty'))['max']
+                min_count_duty = qs_profile.aggregate(min=Min('count_duty'))['min']
 
                 # Получаем всех пользователей, которые не входят в список тех, кто уже подежурил
-                users_yes_duty = Profile.objects.filter(
-                    number_appeal=number_appeal).exclude(
-                    user_id__in=set(remember_count_duty)).values('user_id')
+                users_yes_duty = list(qs_profile.exclude(user_id__in=set(remember_count_duty)).values('user_id'))
 
                 # Получаем всех пользователей на текущую дату, кто не может дежурить (госпиталь, командировка и другое)
-                users_not_duty = Profile.objects.filter(
-                    number_appeal=number_appeal,
-                    user__days__date=date_days_week).exclude(
-                    user__days__type_of_day=TypeOfDay.WORK).values('user_id').distinct()
+                users_not_duty = list(qs_profile.filter(user__days__date=date_days_week).exclude(
+                    user__days__type_of_day=TypeOfDay.WORK).values('user_id').distinct())
 
-                # Проверяем совпадает ли список не дежуривших и тех, кто не может дежурить
-                # если совпадает, то меняем приоритет призыва для дежурства
+                # Проверяем совпадает ли список тех кто не дежурил с теми кто не может дежурить или с пустым списком
+                # (то есть все дежурили) если совпадает, то меняем приоритет призыва для дежурства.
 
-                if (list(users_yes_duty)) in ((list(users_not_duty)), []):
-                    # Вызываем фуннкцию, которая изменяет приоритет дежурства
+                if users_yes_duty in (users_not_duty, []):
+                    # Вызываем функцию, которая изменяет приоритет дежурства
                     change_appeal(priority_duty)
-                    # Сохраняем приоритет, обновляем переменную, которая отвечает за информацию о призыву,
+                    # Сохраняем приоритет, обновляем переменную, которая отвечает за информацию о призыве,
                     # обновляем переменную, отвечающую за запоминание id тех, кто уже подежурил
                     priority_duty.save()
                     number_appeal = priority_duty.number_appeal
                     remember_count_duty = []
+                    # Снова формируем запрос на профили новых пользователей
+                    qs_profile = Profile.objects.filter(number_appeal=number_appeal).exclude(
+                        status=UserStatus.DEMOB).order_by('user__last_name')
 
-                # Получение id пользователей исходя из призыва.
-                users_id = Profile.objects.filter(number_appeal=number_appeal).order_by(
-                    'user__last_name').values(
-                    'user')
-
-                # Проверяем у всех ли в призыве равное количество нарядов. Если равно, то мы берем первого пользователя
-                # который присуствует в лаборатории, предварительно отсортировав по алфавиту.
+                # Проверяем у всех ли в призыве равное количество нарядов и в списке дежурств пусто.
+                # Если равно и пусто, то мы берем первого пользователя, который присуствует в лаборатории,
+                # предварительно отсортировав по алфавиту.
                 if max_count_duty == min_count_duty:
-                    if not remember_count_duty:
-                        day = Day.objects.filter(user_id__in=users_id, date=date_days_week,
-                                                 type_of_day=TypeOfDay.WORK).order_by('user__last_name').first()
-                        if not day:
-                            raise exceptions.NotFound(detail={'message': 'День не найден. Создайте день.'})
-                        else:
-                            schedule_list.append(ScheduleDuty(
-                                user_id=day.user_id,
-                                date=date_days_week,
-                            ))
-                            # Изменяем количество нарядов в профиле пользователя
-                            profile_user = Profile.objects.filter(user_id=day.user_id).first()
-                            profile_user.count_duty += 1
-                            profile_user.save()
 
-                        remember_count_duty.append(users_id.first()['user'])
-                    else:
-                        # Вызываем фуннкцию, которая изменяет приоритет дежурства
+                    if not remember_count_duty:
+                        # Получаем профиль первого пользователя
+                        profile_user = qs_profile.first()
+
+                        schedule_list.append(ScheduleDuty(
+                            user_id=profile_user.user.id,
+                            date=date_days_week,
+                        ))
+                        # Изменяем количество нарядов в профиле пользователя
+                        profile_user.count_duty += 1
+                        profile_user.save()
+                        # Формируем список подежуривших пользователей
+                        remember_count_duty.append(profile_user.user.id)
+
+                    # Если количество нарядов равное список дежурств не пустой, то изменяем приоритет дежурства
+                    # Проверка количества отдежуривших с списке remember_count_duty необходима для того,
+                    # чтобы не получилось так, что у 1 человека нарядов меньше чем у остальных, он 1 раз отдежурит и
+                    # приоритет дежурства поменяется. Это условие сделет так, что он подежурит и его призыв также
+                    # дальше пойдет дежурить
+
+                    elif remember_count_duty and len(remember_count_duty) > 2:
                         change_appeal(priority_duty)
                         # Сохраняем приоритет, обновляем переменную, которая отвечает за информацию о призыву,
                         # обновляем переменную, отвечающую за запоминание id тех, кто уже подежурил
@@ -388,28 +375,20 @@ class ScheduleDutyViewSet(viewsets.ModelViewSet):
                         number_appeal = priority_duty.number_appeal
                         remember_count_duty = []
 
+                # Если количество нарядов не равное
                 elif max_count_duty != min_count_duty:
-                    # Ищем день пользователя, у котороторого количетсво нарядов минимально
-                    day = Day.objects.filter(
+                    # Ищем пользователя, у котороторого количетсво нарядов минимально
+                    profile_user = qs_profile.filter(count_duty=min_count_duty).first()
+
+                    schedule_list.append(ScheduleDuty(
+                        user_id=profile_user.user_id,
                         date=date_days_week,
-                        type_of_day=TypeOfDay.WORK,
-                        user_id=Profile.objects.filter(
-                            count_duty=min_count_duty, number_appeal=number_appeal).order_by(
-                            'user__last_name').values('user').first()['user']
-                    ).first()
+                    ))
 
-                    if not day:
-                        raise exceptions.NotFound(detail={'message': 'День не найден. Создайте день.'})
-                    else:
-                        schedule_list.append(ScheduleDuty(
-                            user_id=day.user_id,
-                            date=date_days_week,
-                        ))
-                        profile_user = Profile.objects.filter(user_id=day.user_id).first()
-                        profile_user.count_duty += 1
-                        profile_user.save()
-
-                    remember_count_duty.append(day.user_id)
+                    profile_user.count_duty += 1
+                    profile_user.save()
+                    # Формируем список подежуривших пользователей
+                    remember_count_duty.append(profile_user.user_id)
 
         ScheduleDuty.objects.bulk_create(schedule_list)
         serializer = self.get_serializer(ScheduleDuty.objects.all(), many=True)

@@ -47,9 +47,8 @@ class Event(models.Model):
 
 class Day(models.Model):
     """
-    Класс предназначен для хранения информации об одной из части дня: 1-ая половина дня (до обеда),
-    2-ая половина дня (после обеда и до конца рабочего дня). Также данный класс в себе содержит акумулирующую
-    информацию о рабочем времени и времени сверхурочной работы (о части дня).
+    Класс предназначен для хранения информации об одном дне. Также данный класс в себе содержит акумулирующую
+    информацию о рабочем времени и времени сверхурочной работы, об уважительном  не уважительном отсутствии.
     """
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='days')
@@ -103,16 +102,17 @@ class ControlTime(models.Model):
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
 
+        # функция необходима для работы websocket
         send_event(message='update')
 
 
 class ScheduleDuty(models.Model):
     """
-    Класс предназначен для храенени информации о графике дежурств.
+    Класс предназначен для храенения информации о графике дежурств.
     """
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='schedules')
-    date = models.DateField()
+    date = models.DateField('Дата дежурсвта')
 
     class Meta:
         verbose_name = 'Расписание дежурств'
@@ -124,7 +124,7 @@ class ScheduleDuty(models.Model):
 
 class OrderOfDuty(models.Model):
     """
-    Синглтон
+    Синглтон, который содержит инфомрациюю о призыве, который должен дежурить по расписанию
     """
 
     year_appeal = models.SmallIntegerField('Год призыва')

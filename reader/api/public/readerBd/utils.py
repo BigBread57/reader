@@ -3,10 +3,10 @@ import datetime
 from django.db.models import Max, Min, Sum
 from django.utils.timezone import utc
 
-from accountBd.collections import UserPosition, NumberAppeal
+from accountBd.collections import UserPosition, NumberAppeal, UserStatus
 from accountBd.models import Profile
 from readerBd.collections import TypeOfDay, Times
-from readerBd.models import Event, Day
+from readerBd.models import Event
 
 
 # Функция позвоялет расчитывать время переработки пользователя
@@ -160,18 +160,22 @@ def overtime_calculation(time_entry, time_exit, user, day):
 
 def change_appeal(priority_duty):
     """
-    :param priority_duty: Объект OfferOfDuty, который содержит информацию о текущем дежрном призыве
-    :return: Возвращает priority_duty, содержащую информацию о призыве, которое должно дежурить
+    :param priority_duty: Объект OfferOfDuty, который содержит информацию о текущем дежурном призыве
+    :return: Возвращает priority_duty, содержащую информацию о призыве, который должен дежурить
     """
-
-    min_year_appeal = Profile.objects.aggregate(min_year=Min('year_appeal'))['min_year']
-    max_year_appeal = Profile.objects.aggregate(max_year=Max('year_appeal'))['max_year']
-
+    # Получаем профили тех пользователй, которые не демобилизованы
+    qs = Profile.objects.filter(position__in=(UserPosition.OPERATOR,
+                                              UserPosition.SENIOR_OPERATOR)).exclude(status=UserStatus.DEMOB)
     # Переменные необходимы для проверки 2х призывов в системе и корректного расчета призыва для дежурства.
     # Один призыв находится в системе, когда второй призыв уходит на дембель
-    min_number_appeal = Profile.objects.aggregate(min_number_appeal=Min('number_appeal'))['min_number_appeal']
-    max_number_appeal = Profile.objects.aggregate(max_number_appeal=Max('number_appeal'))['max_number_appeal']
+    min_year_appeal = qs.aggregate(min_year=Min('year_appeal'))['min_year']
+    max_year_appeal = qs.aggregate(max_year=Max('year_appeal'))['max_year']
 
+    min_number_appeal = qs.aggregate(min_number_appeal=Min('number_appeal'))['min_number_appeal']
+    max_number_appeal = qs.aggregate(max_number_appeal=Max('number_appeal'))['max_number_appeal']
+
+    # Условия для смены приоритета дежурства (1 проверка нужна, для того чтобы возвращать тот же самый призыв,
+    # когда он остается один)
     if min_number_appeal != max_number_appeal:
         if priority_duty.number_appeal == NumberAppeal.ONE:
             priority_duty.number_appeal = NumberAppeal.TWO
@@ -186,13 +190,31 @@ def change_appeal(priority_duty):
     return priority_duty
 
 
-def calculation_absence(day):
+def calculation_time_variable(day):
     # Список хранит id всех событий, которые относятся к дню
     list_day_event_id = []
+    # Переменные храянят временные значия количесва общего времени в лаборатории и переработки
+    time_difference = datetime.timedelta(0)
+    overtime = datetime.timedelta(0)
 
+    # Получаем все time_difference и overtime из control_time, которые принадлежат текущему дню
+    # и их сумму заносим в переменные
+    for control_time in day.control_times.all():
+        time_difference += control_time.time_difference
+        overtime += control_time.overtime
+
+    if day.type_of_day == TypeOfDay.WORK:
+        day.real_working_hours = time_difference - overtime
+        day.real_overtime = overtime
+    else:
+        day.real_working_hours = datetime.timedelta(0)
+        day.real_overtime = overtime
+
+    # Получаем id событий, которые относятся к текущему дню
     for day_event_id in day.event.all().values('id'):
         list_day_event_id.append(day_event_id['id'])
 
+    # Проверяем есть ли события, если есть то разделяем такие события на уважительные и не уважительные
     if list_day_event_id:
         event_respectful_absence = Event.objects.filter(id__in=list_day_event_id, respectful_absence=True).aggregate(
             sum_time=Sum('time_plan'))['sum_time']
@@ -208,8 +230,8 @@ def calculation_absence(day):
         events_all_time = event_respectful_absence + event_not_respectful_absence
 
         # Если плановое время работы больше фактического времени работы, то в уважительное время отсуствия заносим,
-        # то время что указано в событиях, а в неуважительное, то что указано в событиях и время которое осталось
-        # из планового времени за вычетом фактически отработанного времени
+        # (то время что указано в событиях), а в неуважительное, (то что указано в событиях и время которое осталось
+        # из планового времени за вычетом фактически отработанного времени)
         if day.plan_working_hours >= count_time_all:
             day.time_of_respectful_absence_fact = event_respectful_absence
             day.time_of_not_respectful_absence_fact = day.plan_working_hours - count_time_all + event_not_respectful_absence
@@ -229,7 +251,9 @@ def calculation_absence(day):
                 day.time_of_respectful_absence_fact = day.plan_working_hours - day.real_working_hours
                 day.time_of_not_respectful_absence_fact = datetime.timedelta(0)
 
-            # Если не уважительное и уважительное время не равно нуль, то записывается в оба времени пропорционально
+            # Если не уважительное и уважительное время не равно нулю, то записывается в оба времени пропорционально,
+            # тому времени, которое указано в плановом времени события. То есть если уважительных событий было на
+            # 2 часа, а неуажиметльных на 1, то пропрции буту 66,6 к уважительным и 33,3 к неуважительным
             elif event_not_respectful_absence != datetime.timedelta(0) and \
                     event_respectful_absence != datetime.timedelta(0):
                 day.time_of_respectful_absence_fact = ((event_respectful_absence / events_all_time) *

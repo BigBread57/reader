@@ -8,10 +8,10 @@ app_name = 'readerBd'
 
 router = routers.SimpleRouter()
 
-router.register('control_times', ControlTimeViewSet, basename='control_times')
 router.register('list_events', ListEventsViewSet, basename='list_events')
-router.register('days', DayViewSet, basename='days')
 router.register('events', EventViewSet, basename='events')
+router.register('control_times', ControlTimeViewSet, basename='control_times')
+router.register('days', DayViewSet, basename='days')
 router.register('schedule_duty', ScheduleDutyViewSet, basename='schedule_duty')
 
 urlpatterns = [
