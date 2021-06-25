@@ -10,7 +10,7 @@ services:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
     ports:
-      - ${DB_PORT}:5432
+      - 5433:5432
     volumes:
       - ./postgres/backup:/backup
       - ./postgres/pg_data:/var/lib/postgresql/data/
@@ -24,12 +24,17 @@ services:
       - DB_NAME=postgres
       - DB_USER=postgres
       - DB_PASS=postgres
+      - CELERY_BROKER=redis://redis:6379/0
+      - CELERY_BACKEND=redis://redis:6379/0
     ports:
-      - ${PORT_WEB}:8000
-      - ${PORT_WEBSOCKET}:9000
+      - 8000:8000
+      - 9000:9000
     build:
       context: ../
       dockerfile: _CI/Dockerfile
     command: ./docker-entrypoint.sh
     depends_on:
       - db
+
+  redis:
+    image: redis:alpine

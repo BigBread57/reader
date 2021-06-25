@@ -10,6 +10,7 @@ media/
 
 # environment
 venv/
+env/
 *.env
 
 reader/reader/settings/local.py
