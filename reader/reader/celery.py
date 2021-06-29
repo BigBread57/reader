@@ -20,7 +20,7 @@ app.autodiscover_tasks()
 app.conf.beat_schedule = {
     'add_day': {
         'task': 'readerBd.tasks.add_day',
-        'schedule': crontab(hour=15, minute=30),
+        'schedule': crontab(hour=0, minute=10),
     },
     'close_day': {
         'task': 'readerBd.tasks.close_day',

@@ -40,7 +40,8 @@ class StatisticUserMixin:
         qs_time_work = Sum('user__days__real_working_hours', filter=query_hours)
         qs_real_overtime = Sum('user__days__real_overtime', filter=query_hours)
         qs_time_of_respectful_absence_fact = Sum('user__days__time_of_respectful_absence_fact', filter=query_hours)
-        qs_time_of_not_respectful_absence_fact = Sum('user__days__time_of_not_respectful_absence_fact', filter=query_hours)
+        qs_time_of_not_respectful_absence_fact = Sum('user__days__time_of_not_respectful_absence_fact',
+                                                     filter=query_hours)
 
         return qs.annotate(
             time_schedule=qs_time_schedule,  # Время работы по графику
@@ -60,7 +61,7 @@ class StatisticProjectMixin:
 
     def get_queryset(self):
         query = Q()
-        query_hours = Q(days__project=F('id'))
+        query_hours = Q(days__project_id=F('id'))
         # Получаем атрибут запроса (данные из фильтра)
         time_entry = self.request.query_params.get('time_entry')
         time_exit = self.request.query_params.get('time_exit')

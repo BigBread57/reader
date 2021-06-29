@@ -1,5 +1,4 @@
 amqp==5.0.6
-APScheduler==3.7.0
 asgiref==3.3.4
 billiard==3.6.4.0
 celery==5.1.1
@@ -16,7 +15,6 @@ cryptography==3.4.7
 defusedxml==0.7.1
 Django==3.1.7
 django-allauth==0.44.0
-django-apscheduler==0.5.2
 django-cors-headers==3.7.0
 django-environ==0.4.5
 django-filter==2.4.0

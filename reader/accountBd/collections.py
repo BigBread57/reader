@@ -46,6 +46,7 @@ class UserPosition:
     LEADER_LABORATORY = 'leader_laboratory'
     EMPLOYEE = 'employee'
     ENGINEER = 'engineer'
+    DUTY = 'duty'
 
     STATUS_CHOICES = [
         (OPERATOR, 'Оператор'),
@@ -53,6 +54,7 @@ class UserPosition:
         (LEADER_LABORATORY, 'Начальник лаборатории'),
         (EMPLOYEE, 'Сотрудник лаборатории'),
         (ENGINEER, 'Инженер'),
+        (DUTY, 'дежурный'),
     ]
 
 

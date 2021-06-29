@@ -23,7 +23,7 @@ env = environ.Env(
     DEBUG=(bool, False),
     SECRET_KEY=(str, ''),
     ALLOWED_HOSTS=(list, []),
-    CORS_ALLOW_ALL_ORIGINS=(bool, False),
+    CORS_ALLOW_ALL_ORIGINS=(bool, True),
     WEB_SOCKET_SERVER_URL=(str, 'ws://127.0.0.1:9000/'),
     CELERY_BROKER_URL=(str, 'redis://127.0.0.1:6379/'),
     CELERY_RESULT_BACKEND=(str, 'redis://127.0.0.1:6379/')
@@ -58,7 +58,6 @@ INSTALLED_APPS = [
     'allauth',
     'rest_auth',
     'rest_auth.registration',
-    'django_apscheduler',
 
     # Local
     'readerBd',
@@ -91,6 +90,8 @@ MIDDLEWARE = [
 ]
 
 CORS_ALLOW_ALL_ORIGINS = env('CORS_ALLOW_ALL_ORIGINS')
+
+CORS_ORIGIN_ALLOW_ALL = True
 
 TEMPLATES = [
     {

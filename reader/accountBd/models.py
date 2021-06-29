@@ -48,9 +48,8 @@ class Profile(models.Model):
 
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     year_appeal = models.SmallIntegerField('Год призыва', null=True, blank=True)
-    number_appeal = models.SmallIntegerField('Номер призыва', choices=NumberAppeal.CHOICES,
-                                             default=NumberAppeal.ONE, null=True, blank=True)
-    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='projects', verbose_name='Проект',
+    number_appeal = models.SmallIntegerField('Номер призыва', choices=NumberAppeal.CHOICES, null=True, blank=True)
+    project = models.ForeignKey(Project, on_delete=models.RESTRICT, related_name='profiles', verbose_name='Проект',
                                 null=True, blank=True)
     rank = models.CharField('Звание', max_length=20, choices=UserRank.STATUS_CHOICES,
                             default=UserRank.PRIVATE, blank=True, null=True)
@@ -74,6 +73,10 @@ class FileRepository(models.Model):
 
     name = models.CharField('Название файла', max_length=150, unique=True)
     file = models.FileField('Файл', upload_to='docs')
+
+    class Meta:
+        verbose_name = 'Хранилище'
+        verbose_name_plural = 'Хранилище'
 
     def __str__(self):
         return f'{self.file.url}'

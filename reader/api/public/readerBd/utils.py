@@ -223,6 +223,11 @@ def calculation_time_variable(day):
             Event.objects.filter(id__in=list_day_event_id, respectful_absence=False).aggregate(
                 sum_time=Sum('time_plan'))['sum_time']
 
+        if not event_respectful_absence:
+            event_respectful_absence = datetime.timedelta(0)
+        if not event_not_respectful_absence:
+            event_not_respectful_absence = datetime.timedelta(0)
+
         # Рабочее время + уважительное время событий + не уважительное время событий
         count_time_all = event_respectful_absence + event_not_respectful_absence + day.real_working_hours
 

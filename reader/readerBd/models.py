@@ -3,6 +3,7 @@ from datetime import timedelta
 from django.conf import settings
 from django.db import models
 
+from accountBd.collections import NumberAppeal
 from accountBd.models import Project
 from readerBd.collections import TypeOfDay, Times
 from ws.utils import send_event
@@ -31,7 +32,7 @@ class Event(models.Model):
     Класс позволяет работать с событиями, детализировать их и добавлять к объекту Day
     """
 
-    type_event = models.ForeignKey(ListEvents, on_delete=models.CASCADE, related_name='events',
+    type_event = models.ForeignKey(ListEvents, on_delete=models.RESTRICT, related_name='events',
                                    verbose_name='Тип события', blank=True, null=True)
     time_plan = models.DurationField('Планируемое количество времени на событие', default=timedelta(0))
     respectful_absence = models.BooleanField('Уважительное событие', default=True)
@@ -52,7 +53,7 @@ class Day(models.Model):
     """
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='days')
-    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='days',
+    project = models.ForeignKey(Project, on_delete=models.RESTRICT, related_name='days',
                                 null=True, blank=True, db_index=True)
     date = models.DateField('Дата события', db_index=True)
     type_of_day = models.CharField('Тип дня', max_length=20, choices=TypeOfDay.STATUS_CHOICES,
@@ -87,8 +88,9 @@ class ControlTime(models.Model):
     code = models.CharField('Код', max_length=150)
     time_entry = models.DateTimeField('Время входа')  # Время входа в лабораторию
     time_exit = models.DateTimeField('Время выхода', null=True, blank=True)  # Время выхода из лаборатории
+    # Разница между входом и выходом в лабораторию
     time_difference = models.DurationField('Время присутствия', null=True,
-                                           blank=True)  # Разница между входом и выходом в лабораторию
+                                           blank=True, default=timedelta(0))
     overtime = models.DurationField('Время переработки', null=True,
                                     blank=True, default=timedelta(0))  # Время переработки
 
@@ -128,7 +130,7 @@ class OrderOfDuty(models.Model):
     """
 
     year_appeal = models.SmallIntegerField('Год призыва')
-    number_appeal = models.SmallIntegerField('Номер призыва')
+    number_appeal = models.SmallIntegerField('Номер призыва', choices=NumberAppeal.CHOICES,)
 
     def save(self, *args, **kwargs):
         self.pk = 1

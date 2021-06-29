@@ -120,16 +120,14 @@ class DayStatisticSerializer(serializers.ModelSerializer):
     UserStatisticDetailSerializer и ProjectsStatisticDetailSerializer
     """
 
-    control_time = ControlTimeSerializer(many=True)
     type_of_day = ChoiceField(choices=TypeOfDay.STATUS_CHOICES)
-    event = EventSerializer(many=True)
     project = serializers.SerializerMethodField()
 
     class Meta:
         model = Day
         fields = (
             'id', 'user', 'date', 'project', 'type_of_day',
-            'control_time', 'event', 'plan_working_hours', 'real_working_hours',
+            'plan_working_hours', 'real_working_hours',
             'time_of_respectful_absence_fact', 'time_of_not_respectful_absence_fact', 'real_overtime')
         read_only_fields = fields
 

@@ -1,12 +1,12 @@
 import datetime
 import logging
 
+from django.db import IntegrityError
 from django.db.models import Max, Min
 from django.utils import timezone
 from rest_framework import viewsets, generics, status, exceptions
 from django.shortcuts import get_object_or_404
 from rest_framework.decorators import action
-from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from accountBd.collections import UserPosition, UserStatus
@@ -15,6 +15,7 @@ from docs.statistic_docx import event_statistic, journal
 from readerBd.collections import Times, TypeOfDay
 from readerBd.models import ControlTime, Day, ScheduleDuty, OrderOfDuty, ListEvents, Event
 from .filters import ControlTimeFilter
+from .permissions import IsPersonalOrReadOnly
 from .serializers import ControlTimeReaderSerializer, DaySerializer, ControlTimeSerializer, EventSerializer, \
     ControlTimeScheduleDutySerializer, ListEventsSerializer, UpdateControlTimeSerializer, CreateUpdateDaySerializer
 from .utils import overtime_calculation, change_appeal, calculation_time_variable
@@ -27,7 +28,7 @@ class ControlTimeViewSet(viewsets.ModelViewSet):
     Класс позволяет работать с информацией о времени входа/выхода по RFID-метке
     """
 
-    permission_classes = (AllowAny,)
+    permission_classes = (IsPersonalOrReadOnly,)
     queryset = ControlTime.objects.all().order_by('-time_entry')
     serializer_class = ControlTimeReaderSerializer
     filter_class = ControlTimeFilter
@@ -84,15 +85,25 @@ class ControlTimeViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         # Перед изменением объекта control_time мы изменяем данные об этом control_time в объекте Day
         control_time = self.get_object()
-        new_time_difference = serializer.validated_data.get('time_exit') - serializer.validated_data.get('time_entry')
+        print(serializer.validated_data.get('time_exit'))
+
+        if serializer.validated_data.get('time_exit').day() != control_time.time_exit.day() or \
+                serializer.validated_data.get('time_entry').day() != control_time.time_entry.day():
+            raise exceptions.ValidationError(detail={
+                'message': f'Данная временная метка привязана к дате {control_time.time_exit.day()}. '
+                           f'Укажите либо данную дату, либо выберите временную метку с интерисующей датой'})
+        else:
+            new_time_entry = serializer.validated_data.get('time_entry')
+            new_time_exit = serializer.validated_data.get('time_exit')
+
+        new_time_difference = new_time_exit - new_time_entry
 
         day = control_time.day
         user = get_object_or_404(User, id=day.user.id)
 
         # Пересчитываем время переработки с учетом новых показателей
         if day.type_of_day == TypeOfDay.WORK:
-            new_overtime = overtime_calculation(serializer.validated_data.get('time_entry'),
-                                                serializer.validated_data.get('time_exit'), user, day)
+            new_overtime = overtime_calculation(new_time_entry, new_time_exit, user, day)
         else:
             new_overtime = new_time_difference
 
@@ -123,7 +134,7 @@ class ControlTimeTodayList(generics.ListAPIView):
     Класс позволяет работать с информацией о времени входа и выхода на текущую дату.
     """
 
-    permission_classes = (AllowAny,)
+    permission_classes = (IsPersonalOrReadOnly,)
     queryset = ControlTime.objects.all()
     serializer_class = ControlTimeSerializer
 
@@ -142,7 +153,7 @@ class ListEventsViewSet(viewsets.ModelViewSet):
     Класс позволяет работать со списком событий, который могут случиться (разгрузка белья, помощь КР и т.д.)
     """
 
-    permission_classes = (AllowAny,)
+    permission_classes = (IsPersonalOrReadOnly,)
     queryset = ListEvents.objects.all()
     serializer_class = ListEventsSerializer
 
@@ -152,7 +163,7 @@ class EventViewSet(viewsets.ModelViewSet):
     Класс позволяет работать с событиями, детализировать их и добавлять к объекту Day
     """
 
-    permission_classes = (AllowAny,)
+    permission_classes = (IsPersonalOrReadOnly,)
     queryset = Event.objects.all()
     serializer_class = EventSerializer
 
@@ -162,7 +173,7 @@ class DayViewSet(viewsets.ModelViewSet):
     Класс позволяет отображать информацию о днях
     """
 
-    permission_classes = (AllowAny,)
+    permission_classes = (IsPersonalOrReadOnly,)
     queryset = Day.objects.all().order_by('-date',)
     serializer_class = DaySerializer
     filterset_fields = ('user', 'date', 'type_of_day')
@@ -275,7 +286,7 @@ class ScheduleDutyViewSet(viewsets.ModelViewSet):
     Класс позволяет работать с информацией о расписании дежурств по лаборатории и автоматически формировать его
     """
 
-    permission_classes = (AllowAny,)
+    permission_classes = (IsPersonalOrReadOnly,)
     queryset = ScheduleDuty.objects.all()
     serializer_class = ControlTimeScheduleDutySerializer
 
@@ -296,7 +307,14 @@ class ScheduleDutyViewSet(viewsets.ModelViewSet):
         # Переменная для создания конечного графика.
         schedule_list = []
         # Получаем очередь дежурства.
-        priority_duty = OrderOfDuty.load()
+        try:
+            priority_duty = OrderOfDuty.load()
+        except IntegrityError:
+            raise exceptions.NotFound(detail={'message': 'Для автоматического формирования расписания необходимо '
+                                                         'указать дежурный призыв и в профиле пользователей указать '
+                                                         'номер и год призыва. Для указания дежурного призыва '
+                                                         'обратитесь к администратуру.'})
+
         number_appeal = priority_duty.number_appeal
 
         # Создаем график на количество пользователей.
