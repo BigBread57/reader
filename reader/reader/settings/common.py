@@ -56,6 +56,8 @@ INSTALLED_APPS = [
     'rest_framework.authtoken',
     'django_filters',
     'allauth',
+    'allauth.account',
+    'allauth.socialaccount',
     'rest_auth',
     'rest_auth.registration',
 
@@ -175,7 +177,5 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'static/')
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media/')
-
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
 SITE_ID = 1
