@@ -12,11 +12,14 @@ class TypeOfDay:
     HOSPITAL = 'hospital'
     BUSINESS_TRIP = 'business_trip'
     OUTPUT = 'output'
+    HOLIDAY = 'holiday'
+
     STATUS_CHOICES = [
         (WORK, 'Рабочий день'),
         (DUTY, 'Наряд'),
         (HOSPITAL, 'Госпиталь'),
         (BUSINESS_TRIP, 'Командировка'),
+        (HOLIDAY, 'Отпуск'),
         (OUTPUT, 'Выходной'),
     ]
 

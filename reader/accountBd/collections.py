@@ -17,6 +17,7 @@ class UserRank:
     LIEUTENENT_COLONEL = 'lieutenant colonel'
     COLONEL = 'colonel'
     GENERAL = 'general'
+    EMPLOYEE = 'employee'
 
     STATUS_CHOICES = [
         (PRIVATE, 'Рядовой'),
@@ -33,6 +34,7 @@ class UserRank:
         (LIEUTENENT_COLONEL, 'Подполковник'),
         (COLONEL, 'Полковник'),
         (GENERAL, 'Генерал'),
+        (EMPLOYEE, 'Сотрудник'),
     ]
 
 
@@ -54,7 +56,7 @@ class UserPosition:
         (LEADER_LABORATORY, 'Начальник лаборатории'),
         (EMPLOYEE, 'Сотрудник лаборатории'),
         (ENGINEER, 'Инженер'),
-        (DUTY, 'дежурный'),
+        (DUTY, 'Дежурный'),
     ]
 
 
