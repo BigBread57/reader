@@ -40,3 +40,4 @@ services:
     command: ./docker-entrypoint.sh
     depends_on:
       - db
+      - redis

@@ -44,7 +44,7 @@ def add_day():
                 if datetime.datetime.weekday(date_days_week) in (5, 6):
                     day_list.append(Day(
                         user_id=user.id,
-                        project=day.user.profile.project,
+                        project=user.profile.project,
                         date=date_days_week,
                         type_of_day=TypeOfDay.OUTPUT,
                         real_working_hours=datetime.timedelta(0),
@@ -59,7 +59,7 @@ def add_day():
 
                     day_list.append(Day(
                         user_id=user.id,
-                        project=day.user.profile.project,
+                        project=user.profile.project,
                         date=date_days_week,
                         type_of_day=TypeOfDay.WORK,
                         real_working_hours=datetime.timedelta(0),
@@ -88,34 +88,37 @@ def close_day():
     control_times = list(ControlTime.objects.filter(time_exit__isnull=True))
 
     # Список для запоминания измененных control_time
-    list_control_times = []
+    changed_control_times = []
+    control_times_params = []
 
     for control_time in control_times:
-
+        control_time_params = {}
         if control_time.day.user.profile.position in (UserPosition.OPERATOR, UserPosition.SENIOR_OPERATOR):
-            control_time.time_exit = datetime.datetime.combine(control_time.time_entry.date(),
-                                                               Times.TIME_EXIT_EVENING_OPERATOR, tzinfo=utc)
+            control_time_params['time_exit'] = datetime.datetime.combine(control_time.time_entry.date(),
+                                                                         Times.TIME_EXIT_EVENING_OPERATOR, tzinfo=utc)
         else:
-            control_time.time_exit = datetime.datetime.combine(control_time.time_entry.date(),
-                                                               Times.TIME_EXIT_EVENING_PERSONAL, tzinfo=utc)
+            control_time_params['time_exit'] = datetime.datetime.combine(control_time.time_entry.date(),
+                                                                         Times.TIME_EXIT_EVENING_PERSONAL, tzinfo=utc)
 
         # Устанавливаем общее время нахождения в лаборатории
-        control_time.time_difference = control_time.time_exit - control_time.time_entry
+        control_time_params['time_difference'] = control_time_params['time_exit'] - control_time.time_entry
 
         # Рассчитываем время переработки
         if control_time.day.type_of_day == TypeOfDay.WORK:
-            control_time.overtime = overtime_calculation(control_time.time_entry,
-                                                         control_time.time_exit,
-                                                         control_time.day.user,
-                                                         control_time.day)
+            control_time_params['overtime'] = overtime_calculation(
+                control_time.time_entry,
+                control_time_params['time_exit'],
+                control_time.day.user,
+                control_time.day)
         else:
-            control_time.overtime = control_time.time_difference
+            control_time_params['overtime'] = control_time_params['time_difference']
 
-        list_control_times.append(control_time)
+        changed_control_times.append(control_time)
+        control_times_params.append(control_time_params)
 
     # Обновляем все control_time, которые были без времени выхода
-    if list_control_times:
-        ControlTime.objects.bulk_update(list_control_times)
+    if changed_control_times:
+        ControlTime.objects.bulk_update(changed_control_times, control_times_params)
 
 
 @app.task
@@ -131,12 +134,8 @@ def recalculation_day():
     from readerBd.models import Day
 
     days = list(Day.objects.filter(date=timezone.now().date()))
-    list_days = []
 
     for day in days:
 
         rec_day = calculation_time_variable(day)
-        list_days.append(rec_day)
-
-    if list_days:
-        Day.objects.bulk_update(list_days)
+        rec_day.save()
