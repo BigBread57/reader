@@ -24,7 +24,7 @@ def add_day():
     from accountBd.collections import UserStatus
 
     # Ищем пользователей, у которых статус не демобилизиван
-    users = list(User.objects.exclude(profile=UserStatus.DEMOB))
+    users = list(User.objects.exclude(profile__status=UserStatus.DEMOB))
 
     # Переменная необходимая для запоминания созданных объетов
     day_list = []
@@ -34,13 +34,14 @@ def add_day():
         for user in users:
             # Запоминаем текущий день, когда запущен скрипт и прибавляем к нему по 1 дню в каждой итерации цикла
             date_days_week = timezone.now().date() + datetime.timedelta(days=days_week)
-            day = Day.objects.get(date=date_days_week, user_id=user.id)
 
             # Перед созданием объекта мы проверяем, создан ли для данного пользователя день с текущей датой.
             # Если такого дня нет, создаем его
-            if not day:
+            try:
+                day = Day.objects.get(date=date_days_week, user_id=user.id)
+            except Day.DoesNotExist:
                 # Если текущий день попадает на субботу или воскресенье, то создаем объект с типом output (выходной)
-                if datetime.datetime.weekday(date_days_week) in (5,6):
+                if datetime.datetime.weekday(date_days_week) in (5, 6):
                     day_list.append(Day(
                         user_id=user.id,
                         project=day.user.profile.project,
@@ -64,6 +65,7 @@ def add_day():
                         real_working_hours=datetime.timedelta(0),
                         plan_working_hours=plan_working_hours
                     ))
+
     if day_list:
         Day.objects.bulk_create(day_list)
 
