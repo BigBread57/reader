@@ -13,7 +13,6 @@ venv
 env
 *.env
 
-reader/reader/settings/local.py
 pg_data/
 
 local.py
