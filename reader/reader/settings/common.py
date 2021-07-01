@@ -25,8 +25,8 @@ env = environ.Env(
     ALLOWED_HOSTS=(list, []),
     CORS_ALLOW_ALL_ORIGINS=(bool, True),
     WEB_SOCKET_SERVER_URL=(str, 'ws://127.0.0.1:9000/'),
-    CELERY_BROKER_URL=(str, 'redis://127.0.0.1:6379/'),
-    CELERY_RESULT_BACKEND=(str, 'redis://127.0.0.1:6379/')
+    REDIS_HOST=(str, '127.0.0.1'),
+    REDIS_PORT=(int, 6379)
 )
 environ.Env.read_env()
 
@@ -111,8 +111,8 @@ TEMPLATES = [
     },
 ]
 
-REDIS_HOST = os.environ.get('REDIS_HOST', '127.0.0.1')
-REDIS_PORT = os.environ.get('REDIS_PORT', '6379')
+REDIS_HOST = os.environ.get('REDIS_HOST', env('REDIS_HOST'))
+REDIS_PORT = os.environ.get('REDIS_PORT', env('REDIS_PORT'))
 
 # CELERY settings
 CELERY_BROKER_URL = f'redis://{REDIS_HOST}:{REDIS_PORT}/0'

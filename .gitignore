@@ -1,5 +1,7 @@
 __pycache__
 
+media/docs/
+
 # pycharm
 .idea/
 *.pyc
@@ -7,14 +9,14 @@ __pycache__
 .di
 
 # environment
-venv/
-env/
+venv
+env
 *.env
 
-/reader/settings/local.py
 pg_data/
 
 local.py
 
-/reader/env/
-/reader/media/docs/
+dump.rdb
+celerybeat-schedule
+
