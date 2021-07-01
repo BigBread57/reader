@@ -1,7 +1,5 @@
 __pycache__
 
-media/docs/
-
 # pycharm
 .idea/
 *.pyc
@@ -13,8 +11,10 @@ venv/
 env/
 *.env
 
-reader/reader/settings/local.py
+/reader/settings/local.py
 pg_data/
 
 local.py
 
+/reader/env/
+/reader/media/docs/
