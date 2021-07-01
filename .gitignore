@@ -9,12 +9,15 @@ media/docs/
 .di
 
 # environment
-venv/
-env/
+venv
+env
 *.env
 
 reader/reader/settings/local.py
 pg_data/
 
 local.py
+
+dump.rdb
+celerybeat-schedule
 
