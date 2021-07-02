@@ -89,12 +89,29 @@ def close_day():
 
     for control_time in control_times:
 
+        # Текущая дата и время выхода по графику.
+        today_time_operator = datetime.datetime.combine(control_time.time_entry.date(),
+                                                        Times.TIME_EXIT_EVENING_OPERATOR, tzinfo=utc)
+
+        today_time_personal = datetime.datetime.combine(control_time.time_entry.date(),
+                                                        Times.TIME_EXIT_EVENING_PERSONAL, tzinfo=utc)
+
+        # Проверяем если оператор, и проверяем что время входа больше чем время выхода с работы по графику (то есть,
+        # оператор работает после 17:00, а персонал после 18:00, то мы во время выхода записываем время  входа +
+        # 5 минут.
         if control_time.day.user.profile.position in (UserPosition.OPERATOR, UserPosition.SENIOR_OPERATOR):
-            control_time.time_exit = datetime.datetime.combine(control_time.time_entry.date(),
-                                                               Times.TIME_EXIT_EVENING_OPERATOR, tzinfo=utc)
+
+            if control_time.time_entry > today_time_operator:
+                control_time.time_exit = control_time.time_entry + datetime.timedelta(minutes=5)
+            else:
+                control_time.time_exit = today_time_operator
+
         else:
-            control_time.time_exit = datetime.datetime.combine(control_time.time_entry.date(),
-                                                               Times.TIME_EXIT_EVENING_PERSONAL, tzinfo=utc)
+
+            if control_time.time_entry > today_time_personal:
+                control_time.time_exit = control_time.time_entry + datetime.timedelta(minutes=5)
+            else:
+                control_time.time_exit = today_time_personal
 
         # Устанавливаем общее время нахождения в лаборатории
         control_time.time_difference = control_time.time_exit - control_time.time_entry
